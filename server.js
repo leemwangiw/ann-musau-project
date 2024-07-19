@@ -1,48 +1,53 @@
 const express = require('express');
-const bodyParser = require('body-parser');
 const fs = require('fs');
-const path = require('path');
 const app = express();
 const port = 3000;
-const dataFilePath = path.join(__dirname, 'data.json');
 
-// Middleware to parse JSON bodies
-app.use(bodyParser.json());
+app.use(express.json());
+app.use(express.static('public'));
 
-// Function to read data from data.json
-function readData() {
-    try {
-        const data = fs.readFileSync(dataFilePath, 'utf8');
-        return JSON.parse(data);
-    } catch (error) {
-        console.error('Error reading data:', error);
-        return { users: [] }; // Return default structure if error occurs
-    }
-}
+let users = [];
+let fixtures = [
+    { id: 1, team1: "Team A", team2: "Team B", bets: [] },
+    { id: 2, team1: "Team C", team2: "Team D", bets: [] },
+];
 
-// Function to write data to data.json
-function writeData(data) {
-    try {
-        fs.writeFileSync(dataFilePath, JSON.stringify(data, null, 2), 'utf8');
-    } catch (error) {
-        console.error('Error writing data:', error);
-    }
-}
-
-// Endpoint to handle user sign-up
 app.post('/signup', (req, res) => {
     const { username, password } = req.body;
-    let data = readData();
-    
-    // Check if user already exists
-    if (!data.users.find(user => user.username === username)) {
-        // Add new user
-        data.users.push({ username, password, bets: [] });
-        writeData(data);
-        res.json({ success: true, message: 'User created successfully.' });
-    } else {
-        res.status(400).json({ success: false, message: 'Username already exists.' });
+    if (users.find(user => user.username === username)) {
+        return res.status(400).json({ error: 'User already exists' });
     }
+    users.push({ username, password, bets: [] });
+    fs.writeFileSync('users.json', JSON.stringify(users));
+    res.status(201).json({ message: 'User created' });
+});
+
+app.post('/login', (req, res) => {
+    const { username, password } = req.body;
+    const user = users.find(user => user.username === username && user.password === password);
+    if (!user) {
+        return res.status(400).json({ error: 'Invalid credentials' });
+    }
+    res.json({ message: 'Login successful', user });
+});
+
+app.get('/fixtures', (req, res) => {
+    res.json(fixtures);
+});
+
+app.post('/bet', (req, res) => {
+    const { username, fixtureId, bet } = req.body;
+    const user = users.find(user => user.username === username);
+    if (!user) {
+        return res.status(400).json({ error: 'User not found' });
+    }
+    const fixture = fixtures.find(fixture => fixture.id === fixtureId);
+    if (!fixture) {
+        return res.status(400).json({ error: 'Fixture not found' });
+    }
+    fixture.bets.push({ username, bet });
+    fs.writeFileSync('fixtures.json', JSON.stringify(fixtures));
+    res.json({ message: 'Bet placed', fixture });
 });
 
 app.listen(port, () => {
